@@ -33,6 +33,33 @@ func (h *Handler) HandleMessage(message *tgbotapi.Message) error {
 		return nil
 	}
 
+	// 检查是否是自动转发的频道消息，且是当前群组的关联频道
+	if message.IsAutomaticForward && utils.IsChannelMessage(message) {
+		channelID := utils.GetChannelID(message)
+
+		isWhitelisted, err := h.DB.IsChannelWhitelisted(message.Chat.ID, channelID)
+		if err != nil {
+			return err
+		}
+
+		// 如果不在白名单中，自动添加
+		if !isWhitelisted {
+			err = h.DB.AddChannelToWhitelist(message.Chat.ID, channelID, 0, "自动添加的关联频道")
+			if err != nil {
+				return err
+			}
+
+			// 获取频道名称
+			channelName := h.getChannelName(channelID)
+
+			notifyText := fmt.Sprintf("已自动将关联频道「%s」添加到白名单", channelName)
+			notifyMsg := tgbotapi.NewMessage(message.Chat.ID, notifyText)
+			_, _ = h.Bot.Send(notifyMsg)
+
+			return nil
+		}
+	}
+
 	// 如果是频道消息
 	if utils.IsChannelMessage(message) {
 		channelID := utils.GetChannelID(message)
